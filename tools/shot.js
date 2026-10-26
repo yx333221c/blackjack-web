@@ -311,7 +311,43 @@ async function main() {
     var splitState = await evalJs("JSON.stringify({bet:document.getElementById('betAmount').textContent,hands:BJApp.state.hands.map(function(h){return h.stake}),net:BJApp.state.roundNet})");
     console.log('  split money: ' + splitState);
 
-    // 10. narrow viewport
+    // 10. save sheet: export code, then round-trip it through import.
+    //     Restore a real full shoe first: earlier steps injected a tiny
+    //     scripted shoe, which would make the export unrepresentative.
+    await evalJs("(function(){var s=BJApp.state;s.phase='betting';s.hands=[];s.dealer=[];s.pendingBet=0;" +
+      "s.shoe=BJCore.buildShoe(s.rules, BJCore.makeRng(2026));BJApp.sync();})()");
+    await sleep(300);
+    await evalJs("document.getElementById('btnSave').click()");
+    await sleep(360);
+    var exp = await evalJs("JSON.stringify({open:!document.getElementById('sheetSave').hidden,code:document.getElementById('saveOut').value.slice(0,18),len:document.getElementById('saveOut').value.length})");
+    console.log('  export: ' + exp);
+    await shot('15-save-export');
+    await evalJs("document.getElementById('savePass').value='hunter2';document.getElementById('savePass').dispatchEvent(new Event('input'))");
+    await sleep(200);
+    await shot('16-save-passphrase');
+    await evalJs("document.getElementById('tabImport').click()");
+    await sleep(200);
+    await shot('17-save-import');
+    // paste the exported code back with the wrong key first, then the right one
+    await evalJs("(function(){var c=document.getElementById('saveOut').value;document.getElementById('saveIn').value=c.slice(0,Math.floor(c.length/2));document.getElementById('saveIn').dispatchEvent(new Event('input'));})()");
+    await sleep(200);
+    var badIn = await evalJs("JSON.stringify({preview:document.getElementById('importPreview').textContent,disabled:document.getElementById('btnImportApply').disabled})");
+    console.log('  import truncated: ' + badIn);
+    await shot('18-save-import-bad');
+    await evalJs("(function(){var c=document.getElementById('saveOut').value;var i=document.getElementById('saveIn');i.value=c;i.dispatchEvent(new Event('input'));var p=document.getElementById('importPass');p.value='hunter2';p.dispatchEvent(new Event('input'));})()");
+    await sleep(250);
+    var goodIn = await evalJs("JSON.stringify({preview:document.getElementById('importPreview').textContent,disabled:document.getElementById('btnImportApply').disabled})");
+    console.log('  import valid: ' + goodIn);
+    await shot('19-save-import-ok');
+    await evalJs("window.confirm = function(){ return true; };");
+    await evalJs("document.getElementById('btnImportApply').click()");
+    await sleep(500);
+    var afterImp = await evalJs("JSON.stringify({bankroll:BJApp.state.bankroll,level:BJApp.state.level,phase:BJApp.state.phase,decks:BJApp.state.rules.decks,shoeLeft:BJCore.shoeRemaining(BJApp.state.shoe)})");
+    console.log('  after import: ' + afterImp);
+    await shot('20-after-import');
+    await evalJs("document.getElementById('savePass').value='';document.getElementById('importPass').value=''");
+
+    // 11. narrow viewport
     await send('Emulation.setDeviceMetricsOverride', {
       width: 390, height: 844, deviceScaleFactor: 2, mobile: true
     });

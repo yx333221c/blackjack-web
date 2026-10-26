@@ -1563,6 +1563,101 @@ button:disabled {
   text-align: right;
 }
 
+/* ------------------------- save sheet ------------------------- */
+
+.save-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 4px 0 12px;
+  padding: 3px;
+  border-radius: 11px;
+  background: rgba(120, 95, 40, 0.1);
+  border: 1px solid rgba(150, 120, 80, 0.22);
+}
+
+.save-tab {
+  flex: 1 1 50%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-family: var(--font-serif);
+  font-size: 13.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  transition: background 0.16s var(--ease), color 0.16s var(--ease),
+    box-shadow 0.16s var(--ease);
+}
+
+.save-tab[aria-selected="true"] {
+  background: linear-gradient(180deg, #fffdf7, #f0e6d3);
+  color: var(--ink);
+  box-shadow: var(--shadow-soft);
+}
+
+.save-code {
+  width: 100%;
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border-radius: 11px;
+  border: 1px solid rgba(150, 120, 80, 0.35);
+  background: #fffdf7;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  word-break: break-all;
+  resize: vertical;
+  min-height: 84px;
+}
+
+.save-code:focus {
+  outline: none;
+  border-color: var(--felt-1);
+  box-shadow: 0 0 0 3px rgba(47, 114, 85, 0.16);
+}
+
+.save-code[readonly] {
+  background: rgba(255, 253, 246, 0.7);
+  color: var(--ink-soft);
+}
+
+input.text {
+  flex: 0 0 auto;
+  width: 168px;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(150, 120, 80, 0.4);
+  background: #fffdf7;
+  color: var(--ink);
+}
+
+input.text:focus {
+  outline: none;
+  border-color: var(--felt-1);
+  box-shadow: 0 0 0 3px rgba(47, 114, 85, 0.14);
+}
+
+.save-preview {
+  margin: 0 0 4px;
+  padding: 8px 11px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(47, 114, 85, 0.1);
+  border-left: 3px solid var(--felt-1);
+  color: var(--ink-soft);
+}
+
+.save-preview.bad {
+  background: rgba(180, 71, 47, 0.1);
+  border-left-color: var(--lose);
+  color: #8d3620;
+}
+
 .help-cols {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));

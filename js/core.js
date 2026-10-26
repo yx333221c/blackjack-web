@@ -142,6 +142,10 @@
     return shoe.index >= shoe.cutIndex;
   }
 
+  // Returns a copy: `hidden` is per-deal state (the hole card), never a
+  // property of the shoe slot. Handing back the live object would let one
+  // round's hole card stay flagged face-down and reappear as a face-down *up*
+  // card in a later round, or survive a save/reload.
   function draw(shoe, rng) {
     if (shoe.index >= shoe.cards.length) {
       var fresh = buildShoe({ decks: shoe.decks, penetration: shoe.penetration }, rng);
@@ -149,7 +153,8 @@
       shoe.index = 0;
       shoe.cutIndex = fresh.cutIndex;
     }
-    return shoe.cards[shoe.index++];
+    var src = shoe.cards[shoe.index++];
+    return { id: src.id, rank: src.rank, suit: src.suit, red: !!src.red };
   }
 
   // Live card-value distribution of the un dealt part of the shoe. Only the

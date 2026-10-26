@@ -106,6 +106,17 @@ cnt.index = 0;
 eq(core.runningCount(cnt), 5 - 5, 'Hi-Lo running count of a scripted stack');
 eq(core.trueCount(core.buildShoe({ decks: 1 }, core.makeRng(2))), 0, 'true count is 0 on a fresh shoe');
 
+// A dealt card is a copy: marking it face-down for one round must never stick
+// to the shoe slot, or a later round would deal a face-down *up* card.
+var leakShoe = core.buildShoe({ decks: 1 }, core.makeRng(31));
+var first = core.draw(leakShoe);
+first.hidden = true;
+ok(leakShoe.cards[0].hidden === undefined, 'the shoe slot keeps no hidden flag');
+var again = core.draw(leakShoe, core.makeRng(1));
+ok(again !== leakShoe.cards[1], 'draw returns a copy, not the live slot');
+var peek = core.draw(leakShoe);
+ok(!peek.hidden, 'a later draw of the same slot is not flagged hidden');
+
 console.log('\n— settlement —');
 
 var h1 = core.createHand(100, 0);

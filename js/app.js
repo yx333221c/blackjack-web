@@ -41,7 +41,10 @@
     'scrim', 'sheetInsurance', 'insuranceCopy', 'btnInsNo', 'btnInsYes',
     'sheetSettings', 'setLang', 'setDecks', 'setPenetration', 'outPenetration', 'setSoft17',
     'setDas', 'setSurrender', 'setDealOrder', 'setHints', 'setMotion', 'setSound',
-    'btnResetAll', 'btnCloseSettings', 'sheetHelp', 'btnCloseHelp', 'toastRail', 'felt'
+    'btnResetAll', 'btnCloseSettings', 'sheetHelp', 'btnCloseHelp', 'toastRail', 'felt',
+    'btnSave', 'sheetSave', 'tabExport', 'tabImport', 'paneExport', 'paneImport',
+    'savePass', 'saveOut', 'btnSaveCopy', 'btnSaveDownload', 'importPass', 'saveIn',
+    'importPreview', 'btnImportApply', 'btnImportFile', 'importFileInput'
   ];
 
   function cacheEls() {
@@ -333,10 +336,11 @@
     if (state.phase === C.PHASE.BETTING) {
       amount = state.pendingBet;
     } else {
-      // Mid-round the circle shows everything actually committed, which after
-      // a split or a double is more than the opening bet.
+      // Mid-round the circle shows what is actually on the felt, which after a
+      // split or a double is more than the opening bet. Insurance is *not*
+      // included: it has its own well on the table, so counting it here would
+      // display the same chips twice.
       amount = state.hands.reduce(function (sum, h) { return sum + (h.stake || 0); }, 0);
-      if (state.insurance && state.insurance.stake) amount += state.insurance.stake;
       if (!amount) amount = state.bet;
     }
     el.betAmount.textContent = money(amount);
@@ -843,27 +847,27 @@
   }
 
   function dealClick() {
-    if (playing || state.phase !== C.PHASE.BETTING) return;
+    if (playing || state.phase !== C.PHASE.BETTING) return Promise.resolve();
     if (state.pendingBet <= 0) {
       S.error();
       toast(T.t('bet.need'));
-      return;
+      return Promise.resolve();
     }
     S.unlock();
     S.click();
-    if (C.startRound(state)) playEvents();
+    return C.startRound(state) ? playEvents() : Promise.resolve();
   }
 
   function nextClick() {
-    if (playing || state.phase !== C.PHASE.SETTLED) return;
+    if (playing || state.phase !== C.PHASE.SETTLED) return Promise.resolve();
     S.click();
     el.banner.className = 'banner';
     el.roundDelta.hidden = true;
-    if (C.nextRound(state)) playEvents();
+    return C.nextRound(state) ? playEvents() : Promise.resolve();
   }
 
   function doAction(name) {
-    if (playing || state.phase !== C.PHASE.PLAYER) return;
+    if (playing || state.phase !== C.PHASE.PLAYER) return Promise.resolve();
     var map = {
       hit: C.hit,
       stand: C.stand,
@@ -872,15 +876,15 @@
       surrender: C.surrender
     };
     var fn = map[name];
-    if (!fn) return;
+    if (!fn) return Promise.resolve();
     if (!fn(state)) {
       S.error();
       if (name === 'split') toast(T.t('toast.noSplit'));
       else if (name === 'double') toast(T.t('toast.noDouble'));
       else if (name === 'surrender') toast(T.t('toast.noSurrender'));
-      return;
+      return Promise.resolve();
     }
-    playEvents();
+    return playEvents();
   }
 
   function chooseLevel(id) {
@@ -913,9 +917,11 @@
     if (!openSheetName()) el.scrim.hidden = true;
   }
 
+  var SHEETS = ['sheetInsurance', 'sheetSettings', 'sheetHelp', 'sheetSave'];
+
   function openSheetName() {
     var found = null;
-    ['sheetInsurance', 'sheetSettings', 'sheetHelp'].forEach(function (k) {
+    SHEETS.forEach(function (k) {
       if (!el[k].hidden) found = k;
     });
     return found;
@@ -938,12 +944,198 @@
 
   function closeAllSheets() {
     var wasInsurance = !el.sheetInsurance.hidden;
-    ['sheetInsurance', 'sheetSettings', 'sheetHelp'].forEach(function (k) {
+    SHEETS.forEach(function (k) {
       el[k].hidden = true;
     });
     el.scrim.hidden = true;
     // Dismissing the insurance prompt is a decline: never leave the round hung.
     if (wasInsurance) answerInsurance(false);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * portable save codes (see js/save.js for the format)
+   * ------------------------------------------------------------------ */
+
+  var pendingImport = null;
+
+  function saveErrorText(code) {
+    var map = {
+      empty: T.t('save.errors.empty'),
+      format: T.t('save.errors.format'),
+      magic: T.t('save.errors.magic'),
+      checksum: T.t('save.errors.checksum'),
+      json: T.t('save.errors.json'),
+      shape: T.t('save.errors.shape'),
+      shoe: T.t('save.errors.shoe')
+    };
+    return map[code] || String(code || 'unknown');
+  }
+
+  function currentPassphrase() {
+    return el.savePass.value || '';
+  }
+
+  function regenerateExport() {
+    try {
+      // serialize() first: it refunds the on-felt stake so a mid-round export
+      // cannot lose the chips already on the table.
+      el.saveOut.value = BJSave.encode(C.serialize(state), currentPassphrase());
+      el.btnSaveCopy.disabled = false;
+      el.btnSaveDownload.disabled = false;
+    } catch (e) {
+      el.saveOut.value = '';
+      el.btnSaveCopy.disabled = true;
+      el.btnSaveDownload.disabled = true;
+      toast('导出失败：' + e.message, 3200);
+    }
+  }
+
+  function showSaveTab(which) {
+    var isExport = which !== 'import';
+    el.tabExport.setAttribute('aria-selected', String(isExport));
+    el.tabImport.setAttribute('aria-selected', String(!isExport));
+    el.paneExport.hidden = !isExport;
+    el.paneImport.hidden = isExport;
+    if (isExport) regenerateExport();
+    else el.saveIn.focus();
+  }
+
+  function openSave() {
+    S.unlock();
+    showSaveTab('export');
+    evaluateImport();
+    openSheet(el.sheetSave);
+  }
+
+  function copyText(text) {
+    // navigator.clipboard needs a secure context; file:// is not one, so keep
+    // the legacy selection path as the fallback rather than failing silently.
+    if (global.navigator && global.navigator.clipboard && global.navigator.clipboard.writeText &&
+      global.isSecureContext) {
+      return global.navigator.clipboard.writeText(text);
+    }
+    return new Promise(function (resolve, reject) {
+      try {
+        var ta = document.createElement('textarea');
+        ta.value = text;
+        ta.setAttribute('readonly', '');
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        ta.setSelectionRange(0, text.length);
+        var ok = document.execCommand && document.execCommand('copy');
+        document.body.removeChild(ta);
+        ok ? resolve() : reject(new Error('execCommand failed'));
+      } catch (e) {
+        reject(e);
+      }
+    });
+  }
+
+  function downloadSave() {
+    var text = el.saveOut.value;
+    if (!text) return;
+    var blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    var stamp = new Date().toISOString().slice(0, 10);
+    a.href = url;
+    a.download = 'blackjack-save-' + stamp + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    // Revoke on the next tick so the download has picked the blob up.
+    global.setTimeout(function () {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+  function evaluateImport() {
+    var text = el.saveIn.value.trim();
+    pendingImport = null;
+    if (!text) {
+      el.importPreview.hidden = true;
+      el.btnImportApply.disabled = true;
+      return;
+    }
+    var res = BJSave.decode(text, el.importPass.value || '');
+    if (!res.ok) {
+      el.importPreview.hidden = false;
+      el.importPreview.className = 'save-preview bad';
+      el.importPreview.textContent = T.t('save.rejected', { e: saveErrorText(res.error) });
+      el.btnImportApply.disabled = true;
+      return;
+    }
+    pendingImport = res.save;
+    el.importPreview.hidden = false;
+    el.importPreview.className = 'save-preview';
+    el.importPreview.textContent = T.t('save.preview', { s: BJSave.summary(res.save) });
+    el.btnImportApply.disabled = false;
+  }
+
+  function applyImport() {
+    if (!pendingImport) {
+      toast(T.t('save.needCode'));
+      return;
+    }
+    var now = BJSave.summary(C.serialize(state));
+    var incoming = BJSave.summary(pendingImport);
+    if (!global.confirm(T.t('save.confirmOverwrite', { now: now, s: incoming }))) return;
+    state = C.deserialize(pendingImport);
+    // Keep the UI prefs (language/motion/sound) but adopt the imported rules.
+    saveGame();
+    closeSheet(el.sheetSave);
+    T.applyTo(document);
+    renderLevels();
+    sync();
+    S.click();
+    toast(T.t('save.imported', { s: incoming }), 3000);
+  }
+
+  function bindSaveSheet() {
+    el.btnSave.addEventListener('click', openSave);
+    el.tabExport.addEventListener('click', function () { showSaveTab('export'); });
+    el.tabImport.addEventListener('click', function () { showSaveTab('import'); });
+    el.savePass.addEventListener('input', regenerateExport);
+    el.btnSaveCopy.addEventListener('click', function () {
+      copyText(el.saveOut.value).then(function () {
+        toast(T.t('save.copied'), 1600);
+        S.click();
+      }, function () {
+        el.saveOut.select();
+        toast(T.t('save.copyFailed'), 2600);
+        S.error();
+      });
+    });
+    el.btnSaveDownload.addEventListener('click', function () {
+      downloadSave();
+      S.click();
+    });
+    el.saveIn.addEventListener('input', evaluateImport);
+    el.importPass.addEventListener('input', evaluateImport);
+    el.btnImportApply.addEventListener('click', applyImport);
+    el.btnImportFile.addEventListener('click', function () {
+      el.importFileInput.click();
+    });
+    el.importFileInput.addEventListener('change', function () {
+      var file = el.importFileInput.files && el.importFileInput.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function () {
+        el.saveIn.value = String(reader.result || '').trim();
+        evaluateImport();
+      };
+      reader.onerror = function () {
+        toast(T.t('save.rejected', { e: T.t('save.errors.json') }), 2600);
+      };
+      reader.readAsText(file, 'utf-8');
+      el.importFileInput.value = '';
+    });
+    // Esc closes the sheet like the others; the scrim handler already does.
+    el.sheetSave.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && pendingImport) applyImport();
+    });
   }
 
   /* ------------------------------------------------------------------ *
@@ -1194,6 +1386,7 @@
       syncSettingsForm();
       openSheet(el.sheetSettings);
     });
+    bindSaveSheet();
     el.btnCloseSettings.addEventListener('click', function () {
       applySettings();
       closeSheet(el.sheetSettings);
@@ -1241,6 +1434,7 @@
 
   function start() {
     cacheEls();
+    if (global.BJSave && global.BJSave.setCore) global.BJSave.setCore(C);
     loadUI();
     loadGame();
     document.body.classList.toggle('no-motion', !ui.motion);
@@ -1265,6 +1459,17 @@
   global.BJApp = {
     get state() { return state; },
     sync: sync,
-    playEvents: playEvents
+    playEvents: playEvents,
+    // The same path the Next-round button takes, so the harness (and any
+    // console poking) cannot skip the banner/event bookkeeping.
+    nextRound: nextClick,
+    deal: dealClick,
+    act: doAction,
+    // Used by the dev harness (and handy in a console) to skip animation.
+    setMotion: function (on) {
+      ui.motion = !!on;
+      document.body.classList.toggle('no-motion', !ui.motion);
+      return ui.motion;
+    }
   };
 })(window);
