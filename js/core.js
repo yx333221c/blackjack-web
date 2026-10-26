@@ -533,7 +533,7 @@
     {
       id: 'shark',
       index: 3,
-      edge: 0.050,
+      edge: 0.058,
       zh: '算牌鲨鱼',
       en: 'Shoe Shark',
       zhAlgo: 'Hi-Lo 真数 + 信念分布上的动态规划',
