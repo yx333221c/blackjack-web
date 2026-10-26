@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>二十一点 · Blackjack</title>
+    <meta
+      name="description"
+      content="暖色呢绒赌桌风格的 21 点小游戏：四档对手算法（新手 / 标准庄 / 读牌 / 算牌鲨鱼），实时查看对手的决策理由。"
+    />
+    <meta name="color-scheme" content="light" />
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232e6b4f'/%3E%3Crect x='7' y='5' width='13' height='18' rx='2.5' fill='%23fffdf7'/%3E%3Ctext x='9' y='14' font-size='8' fill='%23d2543f' font-family='Georgia'%3EA%3C/text%3E%3Ctext x='18' y='27' font-size='11' fill='%23d2543f' font-family='Georgia'%3E%E2%99%A5%3C/text%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+  <body>
+    <div class="room">
+      <header class="topbar">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">♠</span>
+          <span class="brand-text">
+            <b data-i18n="app.name">二十一点</b>
+            <i data-i18n="app.sub">Blackjack · 暖桌版</i>
+          </span>
+        </div>
+
+        <div class="wallet">
+          <div class="wallet-main">
+            <span class="wallet-label" data-i18n="bankroll">余额</span>
+            <span class="wallet-value" id="bankroll">$1,000</span>
+          </div>
+          <div class="wallet-round" id="roundDelta" hidden>
+            <span id="roundDeltaValue">+$0</span>
+          </div>
+        </div>
+
+        <div class="topbar-tools">
+          <button
+            type="button"
+            class="tool"
+            id="btnSound"
+            aria-pressed="true"
+            title="音效 (M)"
+            data-i18n-title="tool.sound"
+          >
+            <span class="tool-icon" aria-hidden="true">♪</span>
+            <span class="tool-label" data-i18n="tool.sound">音效</span>
+          </button>
+          <button type="button" class="tool" id="btnHelp" data-i18n-title="tool.help">
+            <span class="tool-icon" aria-hidden="true">?</span>
+            <span class="tool-label" data-i18n="tool.help">帮助</span>
+          </button>
+          <button type="button" class="tool" id="btnSettings" data-i18n-title="tool.settings">
+            <span class="tool-icon" aria-hidden="true">⚙</span>
+            <span class="tool-label" data-i18n="tool.settings">设置</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="stage">
+        <!-- ------------------------- table ------------------------- -->
+        <section class="table-area" aria-label="赌桌">
+          <div class="rail">
+            <div class="felt" id="felt">
+              <p class="felt-print" data-i18n="felt.print">
+                BLACKJACK PAYS 3 TO 2 · 庄家必须停牌于 17
+              </p>
+
+              <div class="dealer-block">
+                <div class="seat">
+                  <span class="seat-name" id="dealerName" data-i18n="dealer">庄家</span>
+                  <span class="seat-badge" id="dealerBadge">标准庄</span>
+                </div>
+                <div class="cards dealer-cards" id="dealerCards" aria-live="polite"></div>
+                <div class="total total-dealer" id="dealerTotal" hidden>0</div>
+              </div>
+
+              <div class="table-arc" aria-hidden="true">
+                <span class="arc-line"></span>
+                <span class="arc-note" data-i18n="felt.insurance">保险赔 2:1</span>
+              </div>
+
+              <div class="shoe" id="shoe" aria-hidden="true">
+                <span class="shoe-top"></span>
+                <span class="shoe-count" id="shoeCount">312</span>
+              </div>
+
+              <div class="banner" id="banner" role="status" aria-live="assertive"></div>
+
+              <div class="player-block">
+                <div class="hands" id="playerHands" aria-live="polite"></div>
+                <div class="bet-ring" id="betRing">
+                  <span class="bet-caption" data-i18n="bet.circle">下注区</span>
+                  <div class="bet-stack" id="betStack"></div>
+                  <span class="bet-amount" id="betAmount">$0</span>
+                </div>
+              </div>
+
+              <div class="insurance-well" id="insuranceWell" hidden>
+                <span class="well-caption" data-i18n="insurance.well">保险</span>
+                <div class="well-chips" id="insuranceChips"></div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ------------------------- side panel ------------------------- -->
+        <aside class="sidebar">
+          <section class="panel panel-level">
+            <h2 class="panel-title" data-i18n="level.title">对手难度</h2>
+            <p class="panel-hint" data-i18n-html="level.hint">
+              每一档都是一套<b>不同的抽牌算法</b>，右侧会实时显示它怎么想的。
+            </p>
+            <div class="levels" id="levelList" role="radiogroup" aria-label="难度"></div>
+          </section>
+
+          <section class="panel panel-read">
+            <h2 class="panel-title">
+              <span data-i18n="read.title">对手思路</span>
+              <button type="button" class="mini" id="btnReadToggle" aria-expanded="true">▾</button>
+            </h2>
+            <div class="read-body" id="readBody">
+              <div class="read-current" id="readCurrent">
+                <span class="read-empty" data-i18n="read.empty">开局后这里会逐条显示庄家的决策理由。</span>
+              </div>
+              <ol class="read-log" id="readLog"></ol>
+            </div>
+          </section>
+
+          <section class="panel panel-stats">
+            <h2 class="panel-title" data-i18n="stats.title">战绩</h2>
+            <dl class="stats" id="stats">
+              <div><dt data-i18n="stats.rounds">局数</dt><dd id="stRounds">0</dd></div>
+              <div><dt data-i18n="stats.wl">胜 / 负 / 平</dt><dd id="stWL">0 / 0 / 0</dd></div>
+              <div><dt data-i18n="stats.bj">黑杰克</dt><dd id="stBJ">0</dd></div>
+              <div><dt data-i18n="stats.net">累计盈亏</dt><dd id="stNet">$0</dd></div>
+              <div><dt data-i18n="stats.streak">连胜 / 连败</dt><dd id="stStreak">0 / 0</dd></div>
+            </dl>
+            <button type="button" class="ghost" id="btnResetStats" data-i18n="stats.reset">清零战绩</button>
+          </section>
+        </aside>
+      </main>
+
+      <!-- ------------------------- control dock ------------------------- -->
+      <footer class="dock">
+        <div class="dock-left">
+          <div class="chips" id="chipRack" role="group" aria-label="筹码"></div>
+          <div class="bet-actions">
+            <button type="button" class="mini-chip" id="btnClearBet" data-i18n="bet.clear">撤注</button>
+            <button type="button" class="mini-chip" id="btnRepeat" data-i18n="bet.repeat">重复</button>
+            <button type="button" class="mini-chip" id="btnRaise" data-i18n="bet.raise">加注</button>
+            <button type="button" class="mini-chip" id="btnAllIn" data-i18n="bet.allin">全押</button>
+          </div>
+        </div>
+
+        <div class="dock-right">
+          <div class="hint-slot" id="hintSlot" hidden>
+            <span class="hint-caption" data-i18n="hint.caption">建议</span>
+            <span class="hint-value" id="hintValue">—</span>
+          </div>
+          <div class="actions" id="actions">
+            <button type="button" class="act act-deal" id="btnDeal" data-i18n="act.deal">发牌</button>
+            <button type="button" class="act" id="btnHit" data-i18n="act.hit">要牌</button>
+            <button type="button" class="act" id="btnStand" data-i18n="act.stand">停牌</button>
+            <button type="button" class="act" id="btnDouble" data-i18n="act.double">加倍</button>
+            <button type="button" class="act" id="btnSplit" data-i18n="act.split">分牌</button>
+            <button type="button" class="act" id="btnSurrender" data-i18n="act.surrender">认输</button>
+            <button type="button" class="act act-next" id="btnNext" hidden data-i18n="act.next">下一局</button>
+          </div>
+        </div>
+      </footer>
+    </div>
+
+    <!-- ------------------------- overlays ------------------------- -->
+    <div class="scrim" id="scrim" hidden></div>
+
+    <div class="sheet" id="sheetInsurance" hidden role="dialog" aria-modal="true" aria-labelledby="insTitle">
+      <h3 id="insTitle" data-i18n="insurance.title">庄家明牌是 A · 要买保险吗？</h3>
+      <p class="sheet-copy" id="insuranceCopy" data-i18n="insurance.body">
+        保险花费当前下注的一半。若庄家真的是黑杰克，保险赔 2:1。
+      </p>
+      <p class="sheet-note" data-i18n-html="insurance.note">
+        提示：不数牌的话，保险的期望值是<b>负的</b>（约 −8%），标准打法是拒绝。
+      </p>
+      <div class="sheet-actions">
+        <button type="button" class="act" id="btnInsNo" data-i18n="insurance.no">不买</button>
+        <button type="button" class="act act-primary" id="btnInsYes" data-i18n="insurance.yes">买保险</button>
+      </div>
+    </div>
+
+    <div class="sheet sheet-wide" id="sheetSettings" hidden role="dialog" aria-modal="true" aria-labelledby="setUp">
+      <h3 id="setUp" data-i18n="settings.title">桌台设置</h3>
+      <div class="set-grid">
+        <label class="set-row">
+          <span data-i18n="settings.lang">语言</span>
+          <select id="setLang">
+            <option value="zh">中文</option>
+            <option value="en">English</option>
+          </select>
+        </label>
+        <label class="set-row">
+          <span data-i18n="settings.decks">副数</span>
+          <select id="setDecks">
+            <option value="1">1</option><option value="2">2</option><option value="4">4</option>
+            <option value="6">6</option><option value="8">8</option>
+          </select>
+        </label>
+        <label class="set-row">
+          <span data-i18n="settings.penetration">切牌深度</span>
+          <input type="range" id="setPenetration" min="50" max="95" step="5" />
+          <output id="outPenetration">70%</output>
+        </label>
+        <label class="set-row set-switch">
+          <span data-i18n="settings.soft17">软 17 停牌（S17）</span>
+          <input type="checkbox" id="setSoft17" />
+        </label>
+        <label class="set-row set-switch">
+          <span data-i18n="settings.das">分牌后可加倍</span>
+          <input type="checkbox" id="setDas" />
+        </label>
+        <label class="set-row set-switch">
+          <span data-i18n="settings.surrender">允许提前认输</span>
+          <input type="checkbox" id="setSurrender" />
+        </label>
+        <label class="set-row">
+          <span data-i18n="settings.dealOrder">发牌方式</span>
+          <select id="setDealOrder">
+            <option value="oneByOne" data-i18n="settings.dealOne">轮流一张</option>
+            <option value="twoAtOnce" data-i18n="settings.dealTwo">各发两张</option>
+          </select>
+        </label>
+        <label class="set-row set-switch">
+          <span data-i18n="settings.hints">显示策略建议</span>
+          <input type="checkbox" id="setHints" />
+        </label>
+        <label class="set-row set-switch">
+          <span data-i18n="settings.motion">动画</span>
+          <input type="checkbox" id="setMotion" />
+        </label>
+        <label class="set-row set-switch">
+          <span data-i18n="settings.sound">音效</span>
+          <input type="checkbox" id="setSound" />
+        </label>
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="act act-ghost" id="btnResetAll" data-i18n="settings.resetAll">重置存档</button>
+        <button type="button" class="act act-primary" id="btnCloseSettings" data-i18n="settings.close">完成</button>
+      </div>
+    </div>
+
+    <div class="sheet sheet-wide" id="sheetHelp" hidden role="dialog" aria-modal="true" aria-labelledby="helpUp">
+      <h3 id="helpUp" data-i18n="help.title">玩法与快捷键</h3>
+      <div class="help-cols">
+        <div>
+          <h4 data-i18n="help.rulesH">规则</h4>
+          <ul class="help-list" data-i18n-html="help.rules">
+            <li>目标：手牌点数尽量接近 21 且不超过，赢过庄家。</li>
+            <li>A 计 1 或 11；J / Q / K 计 10。</li>
+            <li>黑杰克（两张牌成 21）赔 3:2。</li>
+            <li>分牌、加倍、保险、可选提前认输。</li>
+          </ul>
+          <h4 data-i18n="help.levelH">对手算法</h4>
+          <ul class="help-list" data-i18n-html="help.levels">
+            <li>新手荷官：随机失误，软牌常搞混。</li>
+            <li>标准庄：固定 17 定式，零失误。</li>
+            <li>老练读牌：追你的点数，按爆牌风险收敛。</li>
+            <li>算牌鲨鱼：真数 + 动态规划解期望值。</li>
+          </ul>
+        </div>
+        <div>
+          <h4 data-i18n="help.keysH">快捷键</h4>
+          <table class="keys">
+            <tbody>
+              <tr><th>空格 / Enter</th><td data-i18n="key.deal">发牌 / 下一局</td></tr>
+              <tr><th>H</th><td data-i18n="act.hit">要牌</td></tr>
+              <tr><th>S</th><td data-i18n="act.stand">停牌</td></tr>
+              <tr><th>D</th><td data-i18n="act.double">加倍</td></tr>
+              <tr><th>P</th><td data-i18n="act.split">分牌</td></tr>
+              <tr><th>U</th><td data-i18n="act.surrender">认输</td></tr>
+              <tr><th>1 – 5</th><td data-i18n="key.chips">放筹码</td></tr>
+              <tr><th>Backspace</th><td data-i18n="key.undo">撤最后枚筹码</td></tr>
+              <tr><th>A</th><td data-i18n="bet.allin">全押</td></tr>
+              <tr><th>R</th><td data-i18n="bet.repeat">重复下注</td></tr>
+              <tr><th>I / N</th><td data-i18n="key.insurance">保险：接受 / 拒绝</td></tr>
+              <tr><th>M</th><td data-i18n="key.mute">静音</td></tr>
+              <tr><th>Esc</th><td data-i18n="key.close">关闭弹层</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="sheet-actions">
+        <button type="button" class="act act-primary" id="btnCloseHelp" data-i18n="help.close">知道了</button>
+      </div>
+    </div>
+
+    <div class="toast-rail" id="toastRail" aria-live="polite"></div>
+
+    <script src="js/core.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/sound.js"></script>
+    <script src="js/app.js"></script>
+  </body>
+</html>

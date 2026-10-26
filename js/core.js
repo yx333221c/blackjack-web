@@ -556,6 +556,19 @@
     }
   ];
 
+  // Flatten the bilingual level metadata into the `xxxZh` / `xxxEn` shape the
+  // i18n layer reads, so the source above can stay terse.
+  LEVELS.forEach(function (l) {
+    l.nameZh = l.zh;
+    l.nameEn = l.en;
+    l.algoZh = l.zhAlgo;
+    l.algoEn = l.enAlgo;
+    l.blurbZh = l.zhBlurb;
+    l.blurbEn = l.enBlurb;
+    l.styleZh = l.zhStyle;
+    l.styleEn = l.enStyle;
+  });
+
   function levelById(id) {
     for (var i = 0; i < LEVELS.length; i++) if (LEVELS[i].id === id) return LEVELS[i];
     return LEVELS[1];
@@ -987,7 +1000,7 @@
     pushEvent(state, { type: 'deal', card: card, to: 'player', hand: state.active, index: h.cards.length - 1 });
     var card2 = draw(state.shoe, state._rng);
     twin.cards.push(card2);
-    pushEvent(state, { type: 'split', hand: state.active, created: twin.id });
+    pushEvent(state, { type: 'split', hand: state.active, created: twin.id, moved: moved });
     pushEvent(state, { type: 'deal', card: card2, to: 'player', hand: state.hands.length - 1, index: 1 });
 
     if (ace) {
@@ -1188,6 +1201,17 @@
     return state.rules;
   }
 
+  function halfStake(stake) {
+    return Math.floor((stake || 0) / 2);
+  }
+
+  function emptyStats() {
+    return {
+      rounds: 0, wins: 0, losses: 0, pushes: 0, blackjacks: 0,
+      net: 0, streak: 0, bestStreak: 0, worstStreak: 0
+    };
+  }
+
   /* ------------------------------------------------------------------ *
    * 9. persistence
    * ------------------------------------------------------------------ */
@@ -1222,6 +1246,42 @@
     };
   }
 
+  // Storage is user-editable: reject anything that is not a real card so a
+  // tampered save can never push NaN into a hand total.
+  var VALID_RANKS = {};
+  RANKS.forEach(function (r) { VALID_RANKS[r] = true; });
+  var VALID_SUITS = {};
+  SUITS.forEach(function (s) { VALID_SUITS[s] = true; });
+
+  function sanitizeShoe(shoe, fallback) {
+    if (!shoe || !Array.isArray(shoe.cards) || shoe.cards.length < 4) return null;
+    var cards = [];
+    for (var i = 0; i < shoe.cards.length; i++) {
+      var c = shoe.cards[i];
+      if (!c || !VALID_RANKS[c.rank] || !VALID_SUITS[c.suit]) return null;
+      cards.push({
+        id: typeof c.id === 'string' ? c.id : i + c.suit + c.rank,
+        rank: c.rank,
+        suit: c.suit,
+        red: !!RED[c.suit],
+        hidden: !!c.hidden
+      });
+    }
+    var decks = Math.max(1, Math.round(Number(shoe.decks) || Math.round(cards.length / 52) || 1));
+    var penetration = clamp(Number(shoe.penetration) || fallback.penetration, 0.3, 0.95);
+    var cutIndex = Math.round(Number(shoe.cutIndex));
+    if (!isFinite(cutIndex) || cutIndex <= 0 || cutIndex > cards.length) {
+      cutIndex = Math.floor(cards.length * penetration);
+    }
+    return {
+      cards: cards,
+      index: clamp(Math.round(Number(shoe.index) || 0), 0, cards.length),
+      decks: decks,
+      penetration: penetration,
+      cutIndex: cutIndex
+    };
+  }
+
   function deserialize(data, options) {
     var state = createGame(options || {});
     if (!data || typeof data !== 'object') return state;
@@ -1233,15 +1293,8 @@
     }
     if (data.rules) state.rules = assign({}, DEFAULT_RULES, data.rules);
     if (data.stats) state.stats = assign({}, state.stats, data.stats);
-    if (data.shoe && Array.isArray(data.shoe.cards) && data.shoe.cards.length) {
-      state.shoe = {
-        cards: data.shoe.cards,
-        index: clamp(data.shoe.index || 0, 0, data.shoe.cards.length),
-        decks: data.shoe.decks || state.shoe.decks,
-        penetration: data.shoe.penetration || state.shoe.penetration,
-        cutIndex: clamp(data.shoe.cutIndex || state.shoe.cutIndex, 0, data.shoe.cards.length)
-      };
-    }
+    var shoe = sanitizeShoe(data.shoe, state.rules);
+    if (shoe) state.shoe = shoe;
     state.lastBet = typeof data.lastBet === 'number' && data.lastBet > 0 ? data.lastBet : 0;
     state.pendingBet = typeof data.pendingBet === 'number' && data.pendingBet > 0 ? data.pendingBet : 0;
     state.pendingBet = Math.min(state.pendingBet, state.bankroll);
@@ -1322,6 +1375,9 @@
     finishRound: finishRound,
     nextRound: nextRound,
     setLevel: setLevel,
-    setRules: setRules
+    setRules: setRules,
+    halfStake: halfStake,
+    emptyStats: emptyStats,
+    raiseBet: raiseBet
   };
 });
