@@ -93,7 +93,8 @@ async function main() {
   var doFlow = args.indexOf('flow') !== -1;
   var lang = (args.join(' ').match(/--lang=(\w+)/) || [])[1] || 'zh';
   var mode = args[0] === 'flow' ? 'flow' : 'boot';
-  var url = 'file:///' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?v=' + Date.now();
+  var url = process.env.BJ_URL ||
+    'file:///' + path.join(ROOT, 'index.html').replace(/\\/g, '/') + '?v=' + Date.now();
 
   fs.mkdirSync(OUT, { recursive: true });
   fs.rmSync(PROFILE, { recursive: true, force: true });
